@@ -1,6 +1,6 @@
 # openclaw-image-mirror
 
-Mirrors `ghcr.io/openclaw/openclaw` tags to `docker.io/openclaw/openclaw` using GitHub Actions + `skopeo copy --all` (preserves multi-arch manifests).
+Mirrors `ghcr.io/openclaw/openclaw` tags to `docker.io/openclaw/openclaw` using GitHub Actions + `skopeo copy --all` (preserves multi-arch manifests). 
 
 ## Required GitHub Actions secrets
 
