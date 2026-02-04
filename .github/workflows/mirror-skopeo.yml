@@ -23,13 +23,22 @@ jobs:
           echo "$DOCKERHUB_TOKEN" | skopeo login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
 
       # Optional: login to GHCR (only needed if GHCR requires auth)
+      # Some GitHub workflow validators reject `secrets.*` usage in `if:` at parse time.
+      # So we always load the secrets into env and skip login if the token is empty.
       - name: Login to GHCR (optional)
-        if: ${{ secrets.GHCR_TOKEN != '' }}
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${GHCR_TOKEN:-}" ]; then
+            echo "GHCR_TOKEN not set; skipping GHCR login."
+            exit 0
+          fi
+          if [ -z "${GHCR_USERNAME:-}" ]; then
+            echo "GHCR_USERNAME not set; defaulting to github.actor is not available here. Set GHCR_USERNAME secret if needed."
+            exit 1
+          fi
           echo "$GHCR_TOKEN" | skopeo login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
       - name: Mirror missing tags (multi-arch preserved)
