@@ -44,34 +44,38 @@ jobs:
       - name: Mirror missing tags (multi-arch preserved)
         env:
           SRC_REPO: ghcr.io/openclaw/openclaw
-          DST_REPO: docker.io/openclaw/openclaw
+          DST_REPO: docker.io/alpine/openclaw
         run: |
           set -euo pipefail
 
           echo "Fetching tags from source: $SRC_REPO"
-          SRC_TAGS_JSON="$(skopeo list-tags docker://$SRC_REPO)"
-          SRC_TAGS="$(echo "$SRC_TAGS_JSON" | jq -r '.Tags[]' | sort -V)"
-          echo ${SRC_TAGS}
+          
+          # Get date-based tags (excluding architecture-specific ones) and take the latest 10
+          DATE_TAGS=$(skopeo list-tags docker://$SRC_REPO | jq -r '.Tags[] | select(test("-(amd64|arm64)$") | not) | select(. != "main" and . != "latest")' | sort -Vr | head -n 10)
+          
+          echo "Date-based tags to check: $DATE_TAGS"
 
-          echo "Fetching tags from destination: $DST_REPO"
-          DST_TAGS_JSON="$(skopeo list-tags docker://$DST_REPO || echo '{\"Tags\":[]}')"
-          DST_TAGS="$(echo "$DST_TAGS_JSON" | jq -r '.Tags[]?' | sort -V)"
-          echo ${DST_TAGS}
-
-          # Compute tags in SRC but not in DST
-          MISSING="$(comm -23 <(echo "$SRC_TAGS") <(echo "$DST_TAGS") || true)"
-
-          if [ -z "$MISSING" ]; then
-            echo "No new tags to mirror."
-            exit 0
-          fi
-
-          echo "Missing tags to mirror:"
-          echo "$MISSING"
-
-          for TAG in $MISSING; do
-            echo "Mirroring tag: $TAG"
-            skopeo copy --all \
-              "docker://$SRC_REPO:$TAG" \
-              "docker://$DST_REPO:$TAG"
+          # Process each date-based tag
+          for TAG in $DATE_TAGS; do
+            echo "Checking if date-based tag exists on Docker Hub: $TAG"
+            status=$(curl -sL "https://hub.docker.com/v2/repositories/alpine/openclaw/tags/$TAG")
+            echo $status
+            if [[ ( "${status}" =~ "not found" ) ]]; then
+              echo "mirror image for $TAG"
+              skopeo copy --all \
+                "docker://$SRC_REPO:$TAG" \
+                "docker://$DST_REPO:$TAG"
+            else
+              echo "Tag $TAG already exists on Docker Hub"
+            fi
           done
+
+          # Always mirror latest and main tags directly without checking
+          echo "Mirroring latest and main tags directly..."
+          skopeo copy --all \
+            "docker://$SRC_REPO:latest" \
+            "docker://$DST_REPO:latest"
+          skopeo copy --all \
+            "docker://$SRC_REPO:main" \
+            "docker://$DST_REPO:main"
+          echo "Latest and main tags mirrored."
